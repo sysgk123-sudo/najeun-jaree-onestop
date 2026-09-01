@@ -112,7 +112,7 @@ with tab1:
             st.warning("⚠️ 최소 1개 이상의 시공 품목을 입력해주세요!")
         else:
             with st.spinner("최고급 양식으로 다품목 견적서를 정돈하는 중입니다..."):
-                font_path = os.path.join(REAL_DESKTOP, "NanumGothic.ttf")
+                font_path = "NanumGothic.ttf"
                 if not os.path.exists(font_path):
                     urllib.request.urlretrieve("https://github.com/google/fonts/raw/main/ofl/nanumgothic/NanumGothic-Regular.ttf", font_path)
                 
