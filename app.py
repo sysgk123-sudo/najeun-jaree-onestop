@@ -1,13 +1,10 @@
 import streamlit as st
 import pandas as pd
 import os
+import io
 import urllib.request
 from datetime import datetime
-
-try:
-    from fpdf import FPDF
-except ImportError:
-    pass
+from PIL import Image, ImageDraw, ImageFont
 
 def get_real_desktop():
     standard_desktop = os.path.expanduser("~/Desktop")
@@ -22,30 +19,35 @@ REAL_DESKTOP = get_real_desktop()
 
 st.set_page_config(page_title="낮은자리표 업무 센터", layout="wide")
 
-# 🎯 버전 관리 표기 (v1.0.16 적용 완료 - 위아래 간격 확장 및 로고/타이틀 위치 원상 복구)
-APP_VERSION = "v1.0.16"
+APP_VERSION = "v1.0.21 (모바일 사진첩 직접 다운로드 지원)"
 st.markdown(f"## 📊 낮은자리표 원스톱 업무 센터 <span style='font-size:16px; color:gray;'>({APP_VERSION})</span>", unsafe_allow_html=True)
 st.markdown("---")
 
 tab1, tab2, tab3, tab4 = st.tabs(["📝 견적서 생성기", "📐 자재/도면 산출기", "📸 SNS/블로그", "💰 자금 관리"])
 
 with tab1:
-    st.header("📝 견적서 생성기 (안전 입력 폼 버전)")
+    st.header("📝 견적서 생성기 (고화질 사진/PNG 저장 지원)")
     st.subheader("1. 기본 정보")
+    
     col1, col2 = st.columns(2)
     with col1:
-        company_name = st.text_input("상대 업체명 (예: 낮은자리 인테리어)")
-        manager_name = st.text_input("담당자 이름 (예: 홍길동 실장)")
-        manager_phone = st.text_input("담당자 번호 (예: 010-1234-5678)")
+        company_name = st.text_input("수신 (업체/상호명)", value="하베스트", placeholder="수신 업체명 (귀하 제외)")
+        manager_name = st.text_input("참조 (담당자 성함)", value="복정욱 대표", placeholder="참조 담당자명")
+        manager_phone = st.text_input("참조 연락처", value="010-1234-4567", placeholder="담당자 연락처")
     with col2:
-        site_name = st.text_input("현장명 (예: 송파 더 베네치아)")
+        site_name = st.text_input("현장명", value="인천좋아2층", placeholder="예: 인천좋아2층 (33㎡ / 약 10평)")
+        est_date = st.date_input("견적 발행일", datetime.today())
         
     st.markdown("---")
     st.subheader("2. 시공 항목 상세 정보")
     
     if "est_rows" not in st.session_state:
         st.session_state.est_rows = [
-            {"품목명": "콩자갈 바닥 시공", "수량": 20.0, "단위": "평", "단가(원)": 110000}
+            {"품목명": "콩자갈", "수량": 14.0, "단위": "포", "단가(원)": 25000},
+            {"품목명": "에폭시 (주제+경화제)", "수량": 1.0, "단위": "말", "단가(원)": 160000},
+            {"품목명": "수용성 프라이머", "수량": 1.0, "단위": "말", "단가(원)": 110000},
+            {"품목명": "신너", "수량": 1.0, "단위": "가롱", "단가(원)": 30000},
+            {"품목명": "시공 인건비", "수량": 1.0, "단위": "인", "단가(원)": 500000}
         ]
 
     if st.button("➕ 시공 품목 한 줄 추가하기"):
@@ -54,29 +56,28 @@ with tab1:
 
     current_rows = []
     indices_to_delete = []
-    
+
     for i, row in enumerate(st.session_state.est_rows):
         cols = st.columns([2.5, 1.2, 1.2, 1.8, 0.6])
         with cols[0]:
-            item_name = st.text_input(f"품목명 #{i+1}", value=row["품목명"], key=f"item_name_{i}")
+            item_name = st.text_input(f"품목명 #{i+1}", value=row.get("품목명", ""), key=f"item_name_{i}")
         with cols[1]:
-            item_qty = st.number_input(f"수량 #{i+1}", value=float(row["수량"]), step=1.0, min_value=0.0, key=f"item_qty_{i}")
+            item_qty = st.number_input(f"수량 #{i+1}", value=float(row.get("수량", 1.0)), step=1.0, min_value=0.0, key=f"item_qty_{i}")
         with cols[2]:
-            unit_options = ["평", "m²", "식", "개"]
-            curr_unit = row["단위"] if row["단위"] in unit_options else "평"
-            item_unit = st.selectbox(f"단위 #{i+1}", options=unit_options, index=unit_options.index(curr_unit), key=f"item_unit_{i}")
+            item_unit = st.text_input(f"단위 #{i+1}", value=str(row.get("단위", "평")), key=f"item_unit_{i}")
         with cols[3]:
-            item_price = st.number_input(f"단가 #{i+1}", value=int(row["단가(원)"]), step=10000, min_value=0, key=f"item_price_{i}", format="%d")
+            item_price = st.number_input(f"단가 #{i+1}", value=int(row.get("단가(원)", 0)), step=10000, min_value=0, key=f"item_price_{i}", format="%d")
         with cols[4]:
             st.markdown("<div style='height: 28px;'></div>", unsafe_allow_html=True)
             if st.button("삭제", key=f"del_row_{i}"):
                 indices_to_delete.append(i)
-                
+
         current_rows.append({
             "품목명": item_name,
             "수량": item_qty,
             "단위": item_unit,
-            "단가(원)": item_price
+            "단가(원)": item_price,
+            "금액": int(item_qty * item_price)
         })
 
     if indices_to_delete:
@@ -84,253 +85,230 @@ with tab1:
             st.session_state.est_rows.pop(idx)
         st.rerun()
 
-    st.session_state.est_rows = current_rows
-    calc_df = pd.DataFrame(current_rows)
-    
-    st.markdown("---")
-    st.subheader("3. 세부 사항 및 할인")
-    memo = st.text_area("기타 (특이사항 및 요청사항)")
-    manual_discount = st.number_input("적용할 할인 금액 (원) - 없으면 0", min_value=0, step=10000)
     st.markdown("---")
     
-    calc_df['수량'] = pd.to_numeric(calc_df['수량'], errors='coerce').fillna(0.0)
-    calc_df['단가(원)'] = pd.to_numeric(calc_df['단가(원)'], errors='coerce').fillna(0)
+    raw_subtotal = sum(r["금액"] for r in current_rows)
     
-    total_price = (calc_df['수량'] * calc_df['단가(원)']).sum()
-    final_price = total_price - manual_discount
-    
-    st.markdown("### 💰 최종 예상 견적 금액")
-    if manual_discount > 0:
-        st.markdown(f"**기본 금액:** {int(total_price):,} 원")
-        st.markdown(f"**할인 적용:** <span style='color:red;'>- {int(manual_discount):,} 원</span>", unsafe_allow_html=True)
-    st.markdown(f"<h2 style='color:blue;'>최종 금액: {int(final_price):,} 원 <span style='font-size:16px; color:gray;'>(부가세 별도)</span></h2>", unsafe_allow_html=True)
+    col_calc1, col_calc2 = st.columns(2)
+    with col_calc1:
+        st.markdown(f"#### 기본 공급가액 소계: **₩ {raw_subtotal:,}** 원")
+        discount_input = st.number_input("할인 / 절사 금액 (원)", value=0, step=1000, min_value=0)
         
-    if st.button("📄 프로페셔널 견적서 PDF 생성하기"):
-        if not site_name:
-            st.warning("⚠️ 현장명을 필수로 입력하셔야 PDF가 생성됩니다!")
-        elif calc_df.empty or str(calc_df.iloc[0]['품목명']).strip() == "":
-            st.warning("⚠️ 최소 1개 이상의 시공 품목을 입력해주세요!")
+    discount_label = ""
+    if discount_input > 0:
+        if discount_input >= 10000:
+            discount_label = "특별할인"
         else:
-            with st.spinner("최고급 양식으로 다품목 견적서를 정돈하는 중입니다..."):
-                font_path = "NanumGothic.ttf"
-                if not os.path.exists(font_path):
-                    urllib.request.urlretrieve("https://github.com/google/fonts/raw/main/ofl/nanumgothic/NanumGothic-Regular.ttf", font_path)
-                
-                pdf = FPDF()
-                pdf.add_page()
-                pdf.add_font("Nanum", style="", fname=font_path)
-                
-                logo_path = ""
-                work_folder = os.path.join(REAL_DESKTOP, "낮은자리_업무")
-                if os.path.exists(os.path.join(work_folder, "낮은자리_로고.png")):
-                    logo_path = os.path.join(work_folder, "낮은자리_로고.png")
-                elif os.path.exists(os.path.join(work_folder, "낮은자리 로고.png")):
-                    logo_path = os.path.join(work_folder, "낮은자리 로고.png")
-                
-                # 로고 위치 쾌적하게 확보 (Y=12)
-                if logo_path:
-                    pdf.image(logo_path, x=15, y=12, w=40)
-                
-                # 🎯 우측 상단 '견적서' 및 '발행일' 여유 있게 배치
-                pdf.set_font("Nanum", size=22)
-                pdf.set_xy(110, 15)
-                pdf.cell(85, 10, text="견   적   서", align='R')
-                
-                pdf.set_font("Nanum", size=9)
-                today_date = datetime.now().strftime("%Y년 %m월 %d일")
-                pdf.set_xy(110, 26)
-                pdf.cell(85, 6, text=f"발행일: {today_date}", align='R')
-                
-                pdf.set_draw_color(100, 100, 100)
-                pdf.set_line_width(0.5)
-                pdf.line(15, 38, 195, 38)
-                
-                # 🎯 수신자 정보 및 공급자 정보 균형 있게 배치 (Y축 44 시작)
-                info_y = 44
-                pdf.set_font("Nanum", size=10)
-                
-                pdf.set_xy(15, info_y)
-                pdf.cell(90, 6, text=f"수 신 : {company_name} 귀하")
-                pdf.set_xy(15, info_y + 7)
-                pdf.cell(90, 6, text=f"참 조 : {manager_name} ({manager_phone})")
-                pdf.set_xy(15, info_y + 14)
-                pdf.cell(90, 6, text=f"현 장 명 : {site_name}")
-                
-                pdf.set_xy(110, info_y)
-                pdf.cell(85, 6, text="공 급 자 : 낮은자리 (Wall & Floor Design)")
-                pdf.set_xy(110, info_y + 7)
-                pdf.cell(85, 6, text="연 락 처 : 010-2261-2873")
-                pdf.set_xy(110, info_y + 14)
-                pdf.cell(85, 6, text="사업자등록번호 : 111-08-70684")
-                
-                # 🎯 상단 금액 칸 (Y축 68 위치에 쾌적하게 안착, 총폭 180)
-                top_box_y = 68
-                pdf.set_fill_color(240, 245, 255)
-                pdf.set_xy(15, top_box_y)
-                pdf.set_font("Nanum", size=10)
-                pdf.cell(180, 10, text=f"   금액일금 : ₩ {int(total_price):,}   [부가세 별도]", border=1, align='L', fill=True)
-                
-                # 시공 품목 테이블 헤더 (Y축 84 고정, 총폭 180)
-                table_header_y = 84
-                pdf.set_xy(15, table_header_y)
-                pdf.set_fill_color(230, 230, 230)
-                pdf.set_font("Nanum", size=10)
-                pdf.cell(85, 9, text="시 공 품 목", border=1, align='C', fill=True)
-                pdf.cell(25, 9, text="수 량", border=1, align='C', fill=True)
-                pdf.cell(35, 9, text="단 가", border=1, align='C', fill=True)
-                pdf.cell(35, 9, text="금 액", border=1, align='C', fill=True)
-                
-                # 시공 품목 행 출력
-                current_y = table_header_y + 9
-                pdf.set_font("Nanum", size=10)
-                rendered_rows = 0
-                for index, row in calc_df.iterrows():
-                    item_name = str(row['품목명']).strip()
-                    if not item_name or item_name == "nan":
-                        continue
-                        
-                    qty = float(row['수량'])
-                    unit = str(row['단위'])
-                    price = int(row['단가(원)'])
-                    row_total = int(qty * price)
-                    
-                    pdf.set_xy(15, current_y)
-                    pdf.cell(85, 9, text=item_name, border=1, align='C')
-                    qty_str = f"{int(qty)} {unit}" if qty.is_integer() else f"{qty} {unit}"
-                    pdf.cell(25, 9, text=qty_str, border=1, align='C')
-                    pdf.cell(35, 9, text=f"₩ {price:,} / {unit}", border=1, align='C')
-                    pdf.cell(35, 9, text=f"₩ {row_total:,}", border=1, align='C')
-                    current_y += 9
-                    rendered_rows += 1
-                
-                # 패딩 행 (최소 5줄 유지)
-                padding_rows = max(1, 5 - rendered_rows)
-                for _ in range(padding_rows):
-                    pdf.set_xy(15, current_y)
-                    pdf.cell(85, 9, text="", border=1)
-                    pdf.cell(25, 9, text="", border=1)
-                    pdf.cell(35, 9, text="", border=1)
-                    pdf.cell(35, 9, text="", border=1)
-                    current_y += 9
-                
-                # 할인 적용 내역
-                if manual_discount > 0:
-                    pdf.set_xy(15, current_y)
-                    pdf.cell(145, 9, text="특별 할인 적용", border=1, align='R')
-                    pdf.set_text_color(220, 20, 60)
-                    pdf.cell(35, 9, text=f"- ₩ {int(manual_discount):,}", border=1, align='C')
-                    pdf.set_text_color(0, 0, 0)
-                    current_y += 9
+            discount_label = "단위 절사"
+            
+    supply_price = max(0, raw_subtotal - discount_input)
+    vat_amount = int(supply_price * 0.1)
+    grand_total = supply_price + vat_amount
 
-                # 🎯 하단 '총 합계' 박스 (총폭 정확히 180: 145 + 35)
-                pdf.set_fill_color(255, 240, 240)
+    with col_calc2:
+        st.markdown("### 💰 견적 정산 요약")
+        if discount_input > 0:
+            st.markdown(f"**{discount_label}:** <span style='color:red;'>- ₩ {int(discount_input):,} 원</span>", unsafe_allow_html=True)
+        st.markdown(f"**공급가액 (상단 총 견적금액):** ₩ {int(supply_price):,} 원 <span style='color:gray;'>(부가세 별도)</span>", unsafe_allow_html=True)
+        st.markdown(f"**부가가치세 (10%):** ₩ {int(vat_amount):,} 원")
+        st.markdown(f"<h2 style='color:blue;'>최종 합계: ₩ {int(grand_total):,} 원 <span style='font-size:16px; color:gray;'>(부가세 포함)</span></h2>", unsafe_allow_html=True)
+
+    st.subheader("3. 특이사항 및 비고")
+    user_memo = st.text_area("현장 추가 요청사항 (선택사항)", placeholder="현장 특이사항이 있을 경우 입력하세요.")
+
+    default_terms = (
+        "* 견적유효기간 30일\n"
+        "* 결제는 착수금70% / 잔금30%\n"
+        "* 입금 확인시 발주가 진행됩니다.\n"
+        "* 카카오뱅크 3333-38-0892030 (낮은자리)"
+    )
+    st.info(f"**[기본 비고란 자동 표기 안내]**\n\n{default_terms.replace(chr(10), '<br>')}", icon="ℹ️")
+
+    st.markdown("---")
+
+    # 🖼️ 견적서 사진 생성
+    if st.button("📸 견적서 사진(PNG) 생성하기"):
+        if not site_name:
+            st.warning("⚠️ 현장명을 필수로 입력하셔야 사진이 생성됩니다!")
+        else:
+            with st.spinner("요청하신 서식에 맞춰 고화질 견적서 사진을 생성 중입니다..."):
+                font_path = os.path.join(REAL_DESKTOP, "NanumGothic.ttf")
+                if not os.path.exists(font_path):
+                    try:
+                        urllib.request.urlretrieve(
+                            "https://github.com/google/fonts/raw/main/ofl/nanumgothic/NanumGothic-Regular.ttf",
+                            font_path
+                        )
+                    except Exception as e:
+                        pass
+
+                img_w, img_h = 1240, 1754
+                img = Image.new("RGB", (img_w, img_h), "white")
+                draw = ImageDraw.Draw(img)
+
+                try:
+                    f_title = ImageFont.truetype(font_path, 44)
+                    f_head = ImageFont.truetype(font_path, 22)
+                    f_bold = ImageFont.truetype(font_path, 20)
+                    f_body = ImageFont.truetype(font_path, 18)
+                    f_small = ImageFont.truetype(font_path, 16)
+                except:
+                    f_title = f_head = f_bold = f_body = f_small = ImageFont.load_default()
+
+                margin_x = 90
+                content_w = img_w - (margin_x * 2)
+
+                draw.text((img_w // 2, 80), "견   적   서", fill="black", font=f_title, anchor="mm")
+                draw.line([(margin_x, 125), (margin_x + content_w, 125)], fill="#1B365D", width=3)
+
+                top_y = 150
+                ref_str = f"{manager_name} 귀하" if manager_name else "귀하"
+                if manager_phone:
+                    ref_str += f" ({manager_phone})"
+
+                draw.text((margin_x, top_y), f"수  신  :  {company_name}", fill="#222222", font=f_head)
+                draw.text((margin_x, top_y + 42), f"참  조  :  {ref_str}", fill="#222222", font=f_body)
+                draw.text((margin_x, top_y + 84), f"현장명 :  {site_name}", fill="#222222", font=f_body)
+                draw.text((margin_x, top_y + 126), f"발행일 :  {est_date.strftime('%Y년 %m월 %d일')}", fill="#555555", font=f_body)
+
+                sup_x = margin_x + content_w - 480
+                sup_y = top_y - 10
+                row_h = 38
+                sup_labels = ["공 급 자", "등록번호", "대    표", "업    태"]
+                sup_values = [
+                    "낮은자리 (Wall & Floor Design)",
+                    "111-08-70684",
+                    "낮은자리 (010-2261-2873)",
+                    "서비스, 인테리어 시공 전문"
+                ]
+
+                for idx in range(4):
+                    curr_row_y = sup_y + (idx * row_h)
+                    draw.rectangle([sup_x, curr_row_y, sup_x + 130, curr_row_y + row_h], fill="#F1F3F5", outline="#B0B8C1", width=1)
+                    draw.text((sup_x + 65, curr_row_y + (row_h // 2)), sup_labels[idx], fill="#333333", font=f_bold, anchor="mm")
+                    draw.rectangle([sup_x + 130, curr_row_y, sup_x + 480, curr_row_y + row_h], fill="white", outline="#B0B8C1", width=1)
+                    draw.text((sup_x + 145, curr_row_y + (row_h // 2)), sup_values[idx], fill="#111111", font=f_small, anchor="lm")
+
+                banner_y = top_y + 175
+                draw.rectangle([margin_x, banner_y, margin_x + content_w, banner_y + 60], fill="#EBF3FB", outline="#B5D1F0", width=2)
+                draw.text((margin_x + 25, banner_y + 30), f"  [ 총 견적 금액 ]   ₩ {int(supply_price):,}  ( 부가세 별도 )", fill="#0A3A82", font=f_head, anchor="lm")
+
+                table_y = banner_y + 80
+                col_w = [440, 130, 110, 170, 210]
+                col_x = [margin_x]
+                for w in col_w:
+                    col_x.append(col_x[-1] + w)
+
+                headers = ["시 공 품 목", "수 량", "단 위", "단 가", "금 액"]
+                th_h = 42
+
+                for c_i in range(5):
+                    draw.rectangle([col_x[c_i], table_y, col_x[c_i+1], table_y + th_h], fill="#F1F3F5", outline="#B0B8C1", width=1)
+                    draw.text(((col_x[c_i] + col_x[c_i+1]) // 2, table_y + (th_h // 2)), headers[c_i], fill="#222222", font=f_bold, anchor="mm")
+
+                row_y = table_y + th_h
+                td_h = 40
+                for r in current_rows:
+                    if not r["품목명"]:
+                        continue
+                    qty_str = f"{r['수량']:.1f}" if r["수량"] % 1 != 0 else f"{int(r['수량'])}"
+                    draw.rectangle([col_x[0], row_y, col_x[1], row_y + td_h], outline="#D0D7DE", width=1)
+                    draw.text((col_x[0] + 15, row_y + (td_h // 2)), r["품목명"], fill="#333333", font=f_body, anchor="lm")
+                    draw.rectangle([col_x[1], row_y, col_x[2], row_y + td_h], outline="#D0D7DE", width=1)
+                    draw.text(((col_x[1] + col_x[2]) // 2, row_y + (td_h // 2)), qty_str, fill="#333333", font=f_body, anchor="mm")
+                    draw.rectangle([col_x[2], row_y, col_x[3], row_y + td_h], outline="#D0D7DE", width=1)
+                    draw.text(((col_x[2] + col_x[3]) // 2, row_y + (td_h // 2)), str(r["단위"]), fill="#333333", font=f_body, anchor="mm")
+                    draw.rectangle([col_x[3], row_y, col_x[4], row_y + td_h], outline="#D0D7DE", width=1)
+                    draw.text((col_x[4] - 15, row_y + (td_h // 2)), f"₩ {int(r['단가(원)']):,}", fill="#333333", font=f_body, anchor="rm")
+                    draw.rectangle([col_x[4], row_y, col_x[5], row_y + td_h], outline="#D0D7DE", width=1)
+                    draw.text((col_x[5] - 15, row_y + (td_h // 2)), f"₩ {int(r['금액']):,}", fill="#111111", font=f_bold, anchor="rm")
+                    row_y += td_h
+
+                draw.rectangle([col_x[0], row_y, col_x[3], row_y + td_h], fill="#F8F9FA", outline="#B0B8C1", width=1)
+                draw.text(((col_x[0] + col_x[3]) // 2, row_y + (td_h // 2)), "소 계 (공급가액 합계)", fill="#333333", font=f_body, anchor="mm")
+                draw.rectangle([col_x[3], row_y, col_x[5], row_y + td_h], fill="#F8F9FA", outline="#B0B8C1", width=1)
+                draw.text((col_x[5] - 15, row_y + (td_h // 2)), f"₩ {raw_subtotal:,}", fill="#333333", font=f_bold, anchor="rm")
+                row_y += td_h
+
+                if discount_input > 0:
+                    draw.rectangle([col_x[0], row_y, col_x[3], row_y + td_h], fill="white", outline="#B0B8C1", width=1)
+                    draw.text(((col_x[0] + col_x[3]) // 2, row_y + (td_h // 2)), f"{discount_label} (공제)", fill="#D32F2F", font=f_body, anchor="mm")
+                    draw.rectangle([col_x[3], row_y, col_x[5], row_y + td_h], fill="white", outline="#B0B8C1", width=1)
+                    draw.text((col_x[5] - 15, row_y + (td_h // 2)), f"- ₩ {int(discount_input):,}", fill="#D32F2F", font=f_bold, anchor="rm")
+                    row_y += td_h
+
+                draw.rectangle([col_x[0], row_y, col_x[3], row_y + td_h], fill="white", outline="#B0B8C1", width=1)
+                draw.text(((col_x[0] + col_x[3]) // 2, row_y + (td_h // 2)), "공 급 가 액", fill="#333333", font=f_body, anchor="mm")
+                draw.rectangle([col_x[3], row_y, col_x[5], row_y + td_h], fill="white", outline="#B0B8C1", width=1)
+                draw.text((col_x[5] - 15, row_y + (td_h // 2)), f"₩ {int(supply_price):,}", fill="#333333", font=f_bold, anchor="rm")
+                row_y += td_h
+
+                draw.rectangle([col_x[0], row_y, col_x[3], row_y + td_h], fill="white", outline="#B0B8C1", width=1)
+                draw.text(((col_x[0] + col_x[3]) // 2, row_y + (td_h // 2)), "부 가 가 치 세 (10%)", fill="#333333", font=f_body, anchor="mm")
+                draw.rectangle([col_x[3], row_y, col_x[5], row_y + td_h], fill="white", outline="#B0B8C1", width=1)
+                draw.text((col_x[5] - 15, row_y + (td_h // 2)), f"₩ {int(vat_amount):,}", fill="#333333", font=f_bold, anchor="rm")
+                row_y += td_h
+
+                tot_h = 48
+                draw.rectangle([col_x[0], row_y, col_x[3], row_y + tot_h], fill="#EBF3FB", outline="#B5D1F0", width=2)
+                draw.text(((col_x[0] + col_x[3]) // 2, row_y + (tot_h // 2)), "최 종 합 계  (부 가 세 포 함)", fill="#0A3A82", font=f_bold, anchor="mm")
+                draw.rectangle([col_x[3], row_y, col_x[5], row_y + tot_h], fill="#EBF3FB", outline="#B5D1F0", width=2)
+                draw.text((col_x[5] - 15, row_y + (tot_h // 2)), f"₩ {int(grand_total):,}", fill="#0A3A82", font=f_head, anchor="rm")
+                row_y += tot_h + 25
+
+                if user_memo:
+                    draw.text((margin_x, row_y), "[ 현장 특이사항 ]", fill="#222222", font=f_bold)
+                    row_y += 30
+                    draw.rectangle([margin_x, row_y, margin_x + content_w, row_y + 60], outline="#D0D7DE", width=1)
+                    draw.text((margin_x + 15, row_y + 15), user_memo, fill="#444444", font=f_body)
+                    row_y += 75
+
+                draw.text((margin_x, row_y), "[ 비 고 ]", fill="#222222", font=f_bold)
+                row_y += 28
+                notice_box_h = 135
+                draw.rectangle([margin_x, row_y, margin_x + content_w, row_y + notice_box_h], fill="#F8F9FA", outline="#D0D7DE", width=1)
                 
-                pdf.set_xy(15, current_y)
-                pdf.set_font("Nanum", size=11)
-                pdf.cell(145, 11, text="   총 합 계    (부가세 별도)", border=1, align='L', fill=True)
-                
-                pdf.set_xy(160, current_y)
-                pdf.set_font("Nanum", size=12)
-                pdf.set_text_color(0, 0, 200)
-                pdf.cell(35, 11, text=f"₩ {int(final_price):,}", border=1, align='C', fill=True)
-                pdf.set_text_color(0, 0, 0)
-                
-                current_y += 18
-                
-                # 특이사항 및 전달사항
-                pdf.set_xy(15, current_y)
-                pdf.set_font("Nanum", size=10)
-                pdf.cell(180, 6, text="[ 특이사항 및 전달사항 ]")
-                
-                current_y += 6
-                pdf.set_xy(15, current_y)
-                pdf.set_font("Nanum", size=9)
-                memo_text = memo if memo else "특이사항 없음"
-                pdf.multi_cell(180, 7, text=memo_text, border=1)
-                
-                current_y += 28
-                pdf.set_xy(15, current_y)
-                pdf.set_font("Nanum", size=11)
-                pdf.cell(180, 8, text="위와 같이 견적서 발행을 확인합니다.", align='C')
-                
-                pdf_file_path = os.path.join(REAL_DESKTOP, f"견적서_{site_name}.pdf")
-                pdf.output(pdf_file_path)
-                
-                st.success(f"✅ 성공! 바탕화면에 '견적서_{site_name}.pdf' 파일이 저장되었습니다!")
+                notices = [
+                    "•  견적유효기간 : 발행일로부터 30일",
+                    "•  결제 조건 : 착수금 70%  /  잔금 30%",
+                    "•  입금 확인 시 자재 발주 및 시공 일정이 확정 진행됩니다.",
+                    "•  입금 계좌 : 카카오뱅크 3333-38-0892030 (낮은자리)"
+                ]
+                for n_i, n_txt in enumerate(notices):
+                    draw.text((margin_x + 20, row_y + 18 + (n_i * 28)), n_txt, fill="#333333", font=f_body)
+
+                row_y += notice_box_h + 35
+                draw.text((img_w // 2, row_y), "위와 같이 견적서를 제출합니다.", fill="#222222", font=f_head, anchor="mm")
+
+                # 1. 아이맥 바탕화면에 자동 저장
+                safe_site = site_name.replace("/", "_").replace(" ", "_")
+                img_file_path = os.path.join(REAL_DESKTOP, f"견적서_{safe_site}.png")
+                img.save(img_file_path, "PNG", quality=95)
+
+                # 2. 스마트폰 사진첩 다운로드용 바이트 버퍼 생성
+                buf = io.BytesIO()
+                img.save(buf, format="PNG", quality=95)
+                byte_im = buf.getvalue()
+
+                # 화면에 저장된 이미지 및 다운로드 버튼 표시
+                st.session_state["generated_image"] = byte_im
+                st.session_state["image_filename"] = f"견적서_{safe_site}.png"
+                st.success("✅ 견적서 사진이 생성되었습니다! 아래 다운로드 버튼을 눌러주세요.")
+
+    # 📥 스마트폰 전용 다운로드 버튼 (사진 생성 시 바로 노출)
+    if "generated_image" in st.session_state:
+        st.download_button(
+            label="📥 스마트폰 사진첩에 견적서 저장하기 (다운로드)",
+            data=st.session_state["generated_image"],
+            file_name=st.session_state["image_filename"],
+            mime="image/png",
+            use_container_width=True
+        )
+        st.image(st.session_state["generated_image"], caption="생성된 견적서 미리보기", use_container_width=True)
 
 with tab2:
     st.write("📐 자재 및 부속품 산출 대시보드")
 with tab3:
     st.write("📸 시공 사례 자동 포스팅 봇")
-
 with tab4:
-    excel_path = os.path.join(REAL_DESKTOP, "자금관리.xlsx")
-    today_str = datetime.now().strftime("%Y-%m-%d")
-
-    if "fund_data" not in st.session_state:
-        if os.path.exists(excel_path):
-            st.session_state.fund_data = pd.read_excel(excel_path)
-        else:
-            st.session_state.fund_data = pd.DataFrame({
-                "날짜": [today_str],
-                "현장명": ["기본 현장"],
-                "항목": ["내용 기입"],
-                "유형": ["수입"],
-                "금액(원)": [0]
-            })
-
-    df = st.session_state.fund_data.copy()
-    valid_dates = [str(d) for d in df.get('날짜', []) if len(str(d)) >= 7]
-    month_list = sorted(list(set([d[:7] for d in valid_dates])), reverse=True)
-    
-    col_filter, _ = st.columns([1, 3])
-    with col_filter:
-        selected_month = st.selectbox("📅 조회할 월(Month) 선택", ["전체 보기"] + month_list)
-
-    if selected_month != "전체 보기" and '날짜' in df.columns:
-        filtered_df = df[df['날짜'].astype(str).str.startswith(selected_month)]
-    else:
-        filtered_df = df
-
-    filtered_df['금액(원)'] = pd.to_numeric(filtered_df['금액(원)'], errors='coerce').fillna(0)
-    total_income = filtered_df[filtered_df["유형"] == "수입"]["금액(원)"].sum()
-    total_expense = filtered_df[filtered_df["유형"] == "지출"]["금액(원)"].sum()
-    net_profit = total_income + total_expense
-    
-    col1, col2, col3 = st.columns(3)
-    col1.metric(f"💰 수입 ({selected_month})", f"₩ {int(total_income):,}")
-    col2.metric(f"💸 지출 ({selected_month})", f"₩ {int(total_expense):,}")
-    col3.metric(f"📊 순수익 ({selected_month})", f"₩ {int(net_profit):,}")
-    st.markdown("---")
-    
-    st.write("**현장별 기입장**")
-    if st.button("➕ 새 내역 추가"):
-        new_row = pd.DataFrame([{
-            "날짜": today_str,
-            "현장명": "",
-            "항목": "",
-            "유형": "지출",
-            "금액(원)": 0
-        }])
-        st.session_state.fund_data = pd.concat([st.session_state.fund_data, new_row], ignore_index=True)
-        st.rerun()
-
-    edited_df = st.data_editor(
-        st.session_state.fund_data, 
-        num_rows="dynamic", 
-        width='stretch',
-        hide_index=True,
-        key="fund_editor_key"
-    )
-    st.session_state.fund_data = edited_df
-
-    if st.button("💾 엑셀 파일로 영구 저장하기 (날짜순 정렬)"):
-        try:
-            if '날짜' in edited_df.columns:
-                edited_df = edited_df.sort_values(by="날짜", ascending=True).reset_index(drop=True)
-            edited_df.to_excel(excel_path, index=False)
-            st.session_state.fund_data = edited_df
-            st.success("✅ 성공! 사장님 바탕화면에 '자금관리.xlsx' 파일이 정확히 저장되었습니다!")
-            st.rerun()
-        except Exception as e:
-            st.error("엑셀 저장 중 오류가 발생했습니다.")
+    st.write("💰 자금 관리")
