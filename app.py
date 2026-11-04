@@ -1,5 +1,4 @@
 import streamlit as st
-import pandas as pd
 import os
 import io
 import urllib.request
@@ -18,8 +17,7 @@ def get_real_desktop():
 REAL_DESKTOP = get_real_desktop()
 
 st.set_page_config(page_title="낮은자리표 업무 센터", layout="wide")
-
-APP_VERSION = "v1.0.21 (모바일 사진첩 직접 다운로드 지원)"
+APP_VERSION = "v1.0.22 (클라우드/모바일 완벽 호환)"
 st.markdown(f"## 📊 낮은자리표 원스톱 업무 센터 <span style='font-size:16px; color:gray;'>({APP_VERSION})</span>", unsafe_allow_html=True)
 st.markdown("---")
 
@@ -86,7 +84,6 @@ with tab1:
         st.rerun()
 
     st.markdown("---")
-    
     raw_subtotal = sum(r["금액"] for r in current_rows)
     
     col_calc1, col_calc2 = st.columns(2)
@@ -96,10 +93,7 @@ with tab1:
         
     discount_label = ""
     if discount_input > 0:
-        if discount_input >= 10000:
-            discount_label = "특별할인"
-        else:
-            discount_label = "단위 절사"
+        discount_label = "특별할인" if discount_input >= 10000 else "단위 절사"
             
     supply_price = max(0, raw_subtotal - discount_input)
     vat_amount = int(supply_price * 0.1)
@@ -116,30 +110,21 @@ with tab1:
     st.subheader("3. 특이사항 및 비고")
     user_memo = st.text_area("현장 추가 요청사항 (선택사항)", placeholder="현장 특이사항이 있을 경우 입력하세요.")
 
-    default_terms = (
-        "* 견적유효기간 30일\n"
-        "* 결제는 착수금70% / 잔금30%\n"
-        "* 입금 확인시 발주가 진행됩니다.\n"
-        "* 카카오뱅크 3333-38-0892030 (낮은자리)"
-    )
-    st.info(f"**[기본 비고란 자동 표기 안내]**\n\n{default_terms.replace(chr(10), '<br>')}", icon="ℹ️")
-
     st.markdown("---")
 
-    # 🖼️ 견적서 사진 생성
     if st.button("📸 견적서 사진(PNG) 생성하기"):
         if not site_name:
             st.warning("⚠️ 현장명을 필수로 입력하셔야 사진이 생성됩니다!")
         else:
-            with st.spinner("요청하신 서식에 맞춰 고화질 견적서 사진을 생성 중입니다..."):
-                font_path = os.path.join(REAL_DESKTOP, "NanumGothic.ttf")
+            with st.spinner("견적서 사진을 생성 중입니다..."):
+                font_path = "NanumGothic.ttf"
                 if not os.path.exists(font_path):
                     try:
                         urllib.request.urlretrieve(
                             "https://github.com/google/fonts/raw/main/ofl/nanumgothic/NanumGothic-Regular.ttf",
                             font_path
                         )
-                    except Exception as e:
+                    except Exception:
                         pass
 
                 img_w, img_h = 1240, 1754
@@ -240,13 +225,13 @@ with tab1:
                 draw.rectangle([col_x[0], row_y, col_x[3], row_y + td_h], fill="white", outline="#B0B8C1", width=1)
                 draw.text(((col_x[0] + col_x[3]) // 2, row_y + (td_h // 2)), "공 급 가 액", fill="#333333", font=f_body, anchor="mm")
                 draw.rectangle([col_x[3], row_y, col_x[5], row_y + td_h], fill="white", outline="#B0B8C1", width=1)
-                draw.text((col_x[5] - 15, row_y + (td_h // 2)), f"₩ {int(supply_price):,}", fill="#333333", font=f_bold, anchor="rm")
+                draw.text((col_x[5] - 15, row_y + (td_h // 2)), f"₩ {int(supply_price):,}", fill="#333333", font=f_body, anchor="rm")
                 row_y += td_h
 
                 draw.rectangle([col_x[0], row_y, col_x[3], row_y + td_h], fill="white", outline="#B0B8C1", width=1)
                 draw.text(((col_x[0] + col_x[3]) // 2, row_y + (td_h // 2)), "부 가 가 치 세 (10%)", fill="#333333", font=f_body, anchor="mm")
                 draw.rectangle([col_x[3], row_y, col_x[5], row_y + td_h], fill="white", outline="#B0B8C1", width=1)
-                draw.text((col_x[5] - 15, row_y + (td_h // 2)), f"₩ {int(vat_amount):,}", fill="#333333", font=f_bold, anchor="rm")
+                draw.text((col_x[5] - 15, row_y + (td_h // 2)), f"₩ {int(vat_amount):,}", fill="#333333", font=f_body, anchor="rm")
                 row_y += td_h
 
                 tot_h = 48
@@ -280,22 +265,21 @@ with tab1:
                 row_y += notice_box_h + 35
                 draw.text((img_w // 2, row_y), "위와 같이 견적서를 제출합니다.", fill="#222222", font=f_head, anchor="mm")
 
-                # 1. 아이맥 바탕화면에 자동 저장
+                # 바탕화면 폴더가 존재할 때만 아이맥 파일로 저장 (클라우드 환경에선 자동 건너뜀)
                 safe_site = site_name.replace("/", "_").replace(" ", "_")
-                img_file_path = os.path.join(REAL_DESKTOP, f"견적서_{safe_site}.png")
-                img.save(img_file_path, "PNG", quality=95)
+                if os.path.exists(REAL_DESKTOP):
+                    try:
+                        img.save(os.path.join(REAL_DESKTOP, f"견적서_{safe_site}.png"), "PNG", quality=95)
+                    except Exception:
+                        pass
 
-                # 2. 스마트폰 사진첩 다운로드용 바이트 버퍼 생성
+                # 스마트폰 다운로드용 바이트 버퍼 생성
                 buf = io.BytesIO()
                 img.save(buf, format="PNG", quality=95)
-                byte_im = buf.getvalue()
-
-                # 화면에 저장된 이미지 및 다운로드 버튼 표시
-                st.session_state["generated_image"] = byte_im
+                st.session_state["generated_image"] = buf.getvalue()
                 st.session_state["image_filename"] = f"견적서_{safe_site}.png"
-                st.success("✅ 견적서 사진이 생성되었습니다! 아래 다운로드 버튼을 눌러주세요.")
+                st.success("✅ 견적서 사진이 성공적으로 생성되었습니다!")
 
-    # 📥 스마트폰 전용 다운로드 버튼 (사진 생성 시 바로 노출)
     if "generated_image" in st.session_state:
         st.download_button(
             label="📥 스마트폰 사진첩에 견적서 저장하기 (다운로드)",
@@ -306,9 +290,6 @@ with tab1:
         )
         st.image(st.session_state["generated_image"], caption="생성된 견적서 미리보기", use_container_width=True)
 
-with tab2:
-    st.write("📐 자재 및 부속품 산출 대시보드")
-with tab3:
-    st.write("📸 시공 사례 자동 포스팅 봇")
-with tab4:
-    st.write("💰 자금 관리")
+with tab2: st.write("📐 자재 및 부속품 산출 대시보드")
+with tab3: st.write("📸 시공 사례 자동 포스팅 봇")
+with tab4: st.write("💰 자금 관리")
