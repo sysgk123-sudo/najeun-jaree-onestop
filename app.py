@@ -17,6 +17,51 @@ def get_real_desktop():
 REAL_DESKTOP = get_real_desktop()
 
 st.set_page_config(page_title="낮은자리표 업무 센터", layout="wide")
+
+# ==========================================
+# [모바일 당겨서 새로고침 차단 & TOP 플로팅 버튼]
+# ==========================================
+st.markdown(
+    '''
+    <style>
+    /* 1. 모바일 브라우저 당겨서 새로고침 원천 차단 */
+    html, body, #root, .main, [data-testid="stAppViewContainer"], [data-testid="stMain"] {
+        overscroll-behavior-y: none !important;
+        overscroll-behavior: none !important;
+        -webkit-overflow-scrolling: auto !important;
+    }
+
+    /* 2. 화면 우측 하단 고정 TOP 플로팅 버튼 */
+    .floating-top-btn {
+        position: fixed !important;
+        bottom: 30px !important;
+        right: 25px !important;
+        width: 55px !important;
+        height: 55px !important;
+        background-color: #000000 !important;
+        color: #ffffff !important;
+        border-radius: 50% !important;
+        display: flex !important;
+        align-items: center !important;
+        justify-content: center !important;
+        font-weight: bold !important;
+        font-size: 13px !important;
+        text-decoration: none !important;
+        box-shadow: 0 4px 15px rgba(0,0,0,0.5) !important;
+        z-index: 9999999 !important;
+        border: 2px solid #ffffff !important;
+    }
+    .floating-top-btn:hover, .floating-top-btn:active {
+        background-color: #333333 !important;
+        color: #ffffff !important;
+    }
+    </style>
+    <!-- 상단 앵커 및 버튼 링크 -->
+    <div id="top-anchor"></div>
+    <a href="#top-anchor" class="floating-top-btn">TOP ▲</a>
+    ''',
+    unsafe_allow_html=True
+)
 import streamlit.components.v1 as components
 
 components.html(
@@ -58,62 +103,6 @@ APP_VERSION = "v1.0.22 (클라우드/모바일 완벽 호환)"
 st.markdown(f"## 📊 낮은자리표 원스톱 업무 센터 <span style='font-size:16px; color:gray;'>({APP_VERSION})</span>", unsafe_allow_html=True)
 st.markdown("---")
 
-# --- [모바일 당겨서 새로고침 방지 & TOP 플로팅 버튼] ---
-import streamlit.components.v1 as components
-components.html(
-    """
-    <style>
-      #top-floating-btn {
-        position: fixed;
-        bottom: 25px;
-        right: 25px;
-        width: 52px;
-        height: 52px;
-        background-color: #1a1a1a;
-        color: #ffffff;
-        border-radius: 50%;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        font-weight: bold;
-        font-size: 13px;
-        box-shadow: 0 4px 14px rgba(0,0,0,0.35);
-        cursor: pointer;
-        z-index: 999999;
-        border: 2px solid #555555;
-        user-select: none;
-      }
-    </style>
-    <div id="top-floating-btn" onclick="scrollToTop()">TOP ▲</div>
-    <script>
-      const pDoc = window.parent.document;
-      const st = pDoc.createElement('style');
-      st.innerHTML = 'html, body, #root, .main, [data-testid="stAppViewContainer"], [data-testid="stMain"] { overscroll-behavior-y: contain !important; overscroll-behavior: contain !important; }';
-      pDoc.head.appendChild(st);
-
-      let touchStartY = 0;
-      pDoc.addEventListener('touchstart', function(e) {
-        if (e.touches.length === 1) touchStartY = e.touches[0].pageY;
-      }, { passive: true });
-
-      pDoc.addEventListener('touchmove', function(e) {
-        const moveY = e.touches[0].pageY;
-        const mainEl = pDoc.querySelector('[data-testid="stMain"]') || pDoc.documentElement;
-        if (mainEl.scrollTop <= 0 && moveY > touchStartY) {
-          e.preventDefault();
-        }
-      }, { passive: false });
-
-      function scrollToTop() {
-        const target = pDoc.querySelector('[data-testid="stMain"]') || pDoc.querySelector('section.main') || pDoc.documentElement;
-        target.scrollTo({ top: 0, behavior: 'smooth' });
-      }
-    </script>
-    """,
-    height=0,
-    width=0
-)
-# ----------------------------------------------------
 
 
 tab1, tab2, tab3, tab4 = st.tabs(["📝 견적서 생성기", "📐 자재/도면 산출기", "📸 SNS/블로그", "💰 자금 관리"])
