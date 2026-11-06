@@ -17,6 +17,43 @@ def get_real_desktop():
 REAL_DESKTOP = get_real_desktop()
 
 st.set_page_config(page_title="낮은자리표 업무 센터", layout="wide")
+import streamlit.components.v1 as components
+
+components.html(
+    """
+    <div id="top-btn" onclick="scrollToTop()" style="
+        position: fixed;
+        bottom: 25px;
+        right: 25px;
+        width: 50px;
+        height: 50px;
+        background-color: #111111;
+        color: #ffffff;
+        border-radius: 50%;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-weight: bold;
+        font-size: 14px;
+        box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+        cursor: pointer;
+        z-index: 999999;
+        border: 2px solid #444444;
+    ">TOP▲</div>
+
+    <script>
+    function scrollToTop() {
+        const parentDoc = window.parent.document;
+        const mainEl = parentDoc.querySelector('[data-testid="stMain"]') || 
+                       parentDoc.querySelector('section.main') || 
+                       parentDoc.documentElement;
+        mainEl.scrollTo({ top: 0, behavior: 'smooth' });
+    }
+    </script>
+    """,
+    height=0,
+    width=0
+)
 APP_VERSION = "v1.0.22 (클라우드/모바일 완벽 호환)"
 st.markdown(f"## 📊 낮은자리표 원스톱 업무 센터 <span style='font-size:16px; color:gray;'>({APP_VERSION})</span>", unsafe_allow_html=True)
 st.markdown("---")
@@ -29,11 +66,11 @@ with tab1:
     
     col1, col2 = st.columns(2)
     with col1:
-        company_name = st.text_input("수신 (업체/상호명)", value="하베스트", placeholder="수신 업체명 (귀하 제외)")
-        manager_name = st.text_input("참조 (담당자 성함)", value="복정욱 대표", placeholder="참조 담당자명")
-        manager_phone = st.text_input("참조 연락처", value="010-1234-4567", placeholder="담당자 연락처")
+        company_name = st.text_input("수신 (업체/상호명)", value="", placeholder="수신 업체명 (귀하 제외)")
+        manager_name = st.text_input("참조 (담당자 성함)", value="", placeholder="참조 담당자명")
+        manager_phone = st.text_input("참조 연락처", value="", placeholder="담당자 연락처")
     with col2:
-        site_name = st.text_input("현장명", value="인천좋아2층", placeholder="예: 인천좋아2층 (33㎡ / 약 10평)")
+        site_name = st.text_input("현장명", value="", placeholder="예: 인천좋아2층 (33㎡ / 약 10평)")
         est_date = st.date_input("견적 발행일", datetime.today())
         
     st.markdown("---")
@@ -41,11 +78,7 @@ with tab1:
     
     if "est_rows" not in st.session_state:
         st.session_state.est_rows = [
-            {"품목명": "콩자갈", "수량": 14.0, "단위": "포", "단가(원)": 25000},
-            {"품목명": "에폭시 (주제+경화제)", "수량": 1.0, "단위": "말", "단가(원)": 160000},
-            {"품목명": "수용성 프라이머", "수량": 1.0, "단위": "말", "단가(원)": 110000},
-            {"품목명": "신너", "수량": 1.0, "단위": "가롱", "단가(원)": 30000},
-            {"품목명": "시공 인건비", "수량": 1.0, "단위": "인", "단가(원)": 500000}
+            {"품목명": "", "수량": 1.0, "단위": "평", "단가(원)": 0}
         ]
 
     if st.button("➕ 시공 품목 한 줄 추가하기"):
